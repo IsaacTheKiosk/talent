@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "Track Meet",
+  "version": "1.0.0",
+  "description": "Race to the finish line! Track your recruiting screenings and hit your weekly targets.",
+  "permissions": [
+    "storage",
+    "alarms",
+    "identity"
+  ],
+  "host_permissions": [
+    "https://www.googleapis.com/*",
+    "https://accounts.google.com/*"
+  ],
+  "oauth2": {
+    "client_id": "YOUR_CLIENT_ID.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/calendar.readonly"
+    ]
+  },
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "src/icons/icon16.png",
+      "32": "src/icons/icon32.png",
+      "48": "src/icons/icon48.png",
+      "128": "src/icons/icon128.png"
+    },
+    "default_title": "Track Meet"
+  },
+  "background": {
+    "service_worker": "src/background/background.js",
+    "type": "module"
+  },
+  "icons": {
+    "16": "src/icons/icon16.png",
+    "32": "src/icons/icon32.png",
+    "48": "src/icons/icon48.png",
+    "128": "src/icons/icon128.png"
+  }
+}

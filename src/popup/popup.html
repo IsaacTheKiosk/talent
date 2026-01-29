@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Track Meet</title>
+  <link rel="stylesheet" href="../styles/popup.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo-section">
+        <span class="logo-icon">🏃‍♂️</span>
+        <h1>Track Meet</h1>
+      </div>
+      <span class="week-label" id="weekLabel">This Week</span>
+    </header>
+
+    <div id="authSection" class="auth-section">
+      <div class="auth-icon">📅</div>
+      <h2>Ready to Race?</h2>
+      <p>Connect your Google Calendar to start tracking your screening sprints!</p>
+      <button id="authButton" class="btn btn-primary">
+        <span>🚀</span> Connect Calendar
+      </button>
+    </div>
+
+    <div id="mainContent" class="main-content hidden">
+      <div class="race-status" id="raceStatus">
+        <span class="race-icon">🏁</span>
+        <span class="race-message" id="raceMessage">On your marks...</span>
+      </div>
+
+      <div id="rolesList" class="roles-list">
+        <!-- Lane cards will be dynamically inserted here -->
+      </div>
+
+      <div class="summary-section">
+        <div class="summary-card">
+          <span class="summary-label">Laps Completed</span>
+          <span class="summary-value" id="totalScreenings">0 / 0</span>
+        </div>
+        <div class="summary-card">
+          <span class="summary-label">Race Progress</span>
+          <div class="progress-bar track">
+            <div class="progress-fill runner" id="overallProgress" style="width: 0%">
+              <span class="runner-icon">🏃</span>
+            </div>
+            <span class="finish-line">🏁</span>
+          </div>
+        </div>
+      </div>
+
+      <button id="settingsButton" class="btn btn-secondary">⚙️ Training Plan</button>
+    </div>
+
+    <div id="settingsSection" class="settings-section hidden">
+      <h2>🎯 Set Your Goals</h2>
+      <p class="settings-subtitle">Configure your weekly race targets</p>
+      <div id="targetsList" class="targets-list">
+        <!-- Target inputs will be dynamically inserted here -->
+      </div>
+      <button id="addRoleButton" class="btn btn-secondary">+ Add Lane</button>
+      <div class="settings-actions">
+        <button id="saveSettings" class="btn btn-primary">💾 Save Goals</button>
+        <button id="cancelSettings" class="btn btn-secondary">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js" type="module"></script>
+</body>
+</html>
