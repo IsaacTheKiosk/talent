@@ -1,12 +1,13 @@
 {
   "manifest_version": 3,
   "name": "Track Meet",
-  "version": "1.0.0",
-  "description": "Race to the finish line! Track your recruiting screenings and hit your weekly targets.",
+  "version": "2.0.0",
+  "description": "Smart recruiting performance tracker. Set monthly hire targets, track screens, get AI-powered outreach recommendations.",
   "permissions": [
     "storage",
     "alarms",
-    "identity"
+    "identity",
+    "notifications"
   ],
   "host_permissions": [
     "https://www.googleapis.com/*",
