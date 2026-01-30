@@ -542,7 +542,7 @@ class PopupApp {
       const statusClass = getStatusClass(progress);
 
       return `
-        <div class="role-card" onclick="app.openRoleModal(${index})">
+        <div class="role-card" data-role-index="${index}">
           <div class="role-header">
             <span class="role-name">${role.name}</span>
             <span class="role-count">
@@ -560,6 +560,14 @@ class PopupApp {
         </div>
       `;
     }).join('');
+
+    // Add click handlers to role cards
+    this.rolesList.querySelectorAll('.role-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const index = parseInt(card.dataset.roleIndex);
+        this.openRoleModal(index);
+      });
+    });
 
     // Summary
     let totalScreens = 0;
@@ -727,12 +735,20 @@ class PopupApp {
 
   renderRolesConfig() {
     this.rolesConfig.innerHTML = this.roles.map((role, index) => `
-      <div class="role-config-item" onclick="app.openRoleModal(${index})">
+      <div class="role-config-item" data-role-index="${index}">
         <span class="role-config-name">${role.name}</span>
         <span class="role-config-target">${role.monthlyHireTarget} hires/mo</span>
         <span class="role-config-arrow">›</span>
       </div>
     `).join('');
+
+    // Add click handlers to role config items
+    this.rolesConfig.querySelectorAll('.role-config-item').forEach(item => {
+      item.addEventListener('click', () => {
+        const index = parseInt(item.dataset.roleIndex);
+        this.openRoleModal(index);
+      });
+    });
   }
 
   openRoleModal(index) {
@@ -1066,22 +1082,35 @@ class PopupApp {
     this.searchResults.classList.remove('hidden');
 
     this.searchList.innerHTML = this.generatedSearches.map((search, index) => `
-      <div class="search-item">
+      <div class="search-item" data-index="${index}">
         <div class="search-item-header">
           <span class="search-item-name">${search.name}</span>
           <span class="search-item-type">${search.type}</span>
         </div>
         <div class="search-item-desc">${search.description}</div>
         <div class="search-item-actions">
-          <button class="search-btn search-btn-run" onclick="app.runSearch(${index})">
+          <button class="search-btn search-btn-run" data-action="search" data-index="${index}">
             🔍 Search
           </button>
-          <button class="search-btn search-btn-copy" onclick="app.copySearch(${index})">
+          <button class="search-btn search-btn-copy" data-action="copy" data-index="${index}">
             📋 Copy
           </button>
         </div>
       </div>
     `).join('');
+
+    // Add event listeners for search buttons
+    this.searchList.querySelectorAll('.search-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const index = parseInt(e.target.dataset.index);
+        const action = e.target.dataset.action;
+        if (action === 'search') {
+          this.runSearch(index);
+        } else if (action === 'copy') {
+          this.copySearch(index);
+        }
+      });
+    });
   }
 
   runSearch(index) {
