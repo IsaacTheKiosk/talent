@@ -13,7 +13,7 @@
     "https://accounts.google.com/*"
   ],
   "oauth2": {
-    "client_id": "YOUR_CLIENT_ID.apps.googleusercontent.com",
+    "client_id": "146504429514-14utp14hfkqf790ihicvk2vth6j511dv.apps.googleusercontent.com",
     "scopes": [
       "https://www.googleapis.com/auth/calendar.readonly"
     ]
