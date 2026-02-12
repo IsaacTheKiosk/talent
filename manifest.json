@@ -11,7 +11,9 @@
   ],
   "host_permissions": [
     "https://www.googleapis.com/*",
-    "https://accounts.google.com/*"
+    "https://accounts.google.com/*",
+    "https://api.gem.com/*",
+    "https://api.ashbyhq.com/*"
   ],
   "oauth2": {
     "client_id": "146504429514-14utp14hfkqf790ihicvk2vth6j511dv.apps.googleusercontent.com",

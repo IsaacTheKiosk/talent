@@ -22,11 +22,14 @@
 
     <!-- Auth Section -->
     <div id="authSection" class="auth-section">
-      <div class="auth-icon">📅</div>
+      <div class="auth-icon">🏃‍♂️</div>
       <h2>Ready to Race?</h2>
-      <p>Connect your Google Calendar to start tracking your recruiting performance!</p>
-      <button id="authButton" class="btn btn-primary">
-        <span>🚀</span> Connect Calendar
+      <p>Choose how to connect your data</p>
+      <button id="skipAuthButton" class="btn btn-primary">
+        <span>🔗</span> Set up Gem / Ashby
+      </button>
+      <button id="authButton" class="btn btn-secondary">
+        Connect Google Calendar
       </button>
     </div>
 
@@ -50,6 +53,9 @@
           <!-- Populated by JS -->
         </div>
       </div>
+
+      <!-- Sync Status -->
+      <div id="syncStatusDisplay" class="sync-status hidden"></div>
 
       <!-- Quick Stats -->
       <div class="quick-stats">
@@ -305,6 +311,42 @@ Looking for a Senior Backend Engineer with 5+ years experience in Node.js, Pytho
         <label class="settings-label">Screen Detection Keywords</label>
         <input type="text" id="screenKeywords" class="settings-input" placeholder="screen, phone screen, interview">
         <span class="settings-hint">Comma-separated keywords to identify screens in your calendar</span>
+      </div>
+
+      <!-- API Integrations -->
+      <div class="settings-group">
+        <label class="settings-label">API Integrations</label>
+
+        <!-- Gem -->
+        <div class="integration-card">
+          <div class="integration-header">
+            <span class="integration-name">Gem CRM</span>
+            <span class="integration-status disconnected" id="gemStatus">Not connected</span>
+          </div>
+          <div class="integration-body">
+            <input type="password" id="gemApiKey" class="settings-input" placeholder="Paste Gem API key">
+            <button id="testGemBtn" class="btn btn-small">Test</button>
+          </div>
+          <div id="gemProjectMapping" class="mapping-section hidden"></div>
+          <button id="refreshGemProjects" class="btn btn-small hidden">Refresh Projects</button>
+          <span class="settings-hint">Syncs: Outreach, Responses</span>
+        </div>
+
+        <!-- Ashby -->
+        <div class="integration-card">
+          <div class="integration-header">
+            <span class="integration-name">Ashby ATS</span>
+            <span class="integration-status disconnected" id="ashbyStatus">Not connected</span>
+          </div>
+          <div class="integration-body">
+            <input type="password" id="ashbyApiKey" class="settings-input" placeholder="Paste Ashby API key">
+            <button id="testAshbyBtn" class="btn btn-small">Test</button>
+          </div>
+          <div id="ashbyJobMapping" class="mapping-section hidden"></div>
+          <div id="ashbyStageMapping" class="mapping-section hidden"></div>
+          <button id="refreshAshbyJobs" class="btn btn-small hidden">Refresh Jobs & Stages</button>
+          <span class="settings-hint">Syncs: Screens, Finals, Offers, Hires</span>
+        </div>
       </div>
 
       <!-- Notifications -->

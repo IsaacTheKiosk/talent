@@ -103,7 +103,10 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 async function updateBadge() {
   try {
     const token = await storageService.get('authToken');
-    if (!token) {
+    const gemKey = await storageService.get('gemApiKey');
+    const ashbyKey = await storageService.get('ashbyApiKey');
+
+    if (!token && !gemKey && !ashbyKey) {
       chrome.action.setBadgeText({ text: '' });
       return;
     }
@@ -115,18 +118,15 @@ async function updateBadge() {
     }
 
     const settings = await storageService.get('settings') || {};
-    const { start, end } = getWeekDates();
-    const events = await calendarService.getEvents(start, end);
-
-    // Count screenings
-    let totalCurrent = 0;
-    let totalTarget = 0;
     const keywords = settings.screenKeywords || ['screen', 'interview'];
 
-    roles.forEach(role => {
-      const rates = role.conversionRates || DEFAULT_RATES;
-      const funnel = calculateRequiredOutreach(role.monthlyHireTarget || 1, rates);
-      totalTarget += Math.ceil(funnel.screens / 4);
+    // Count screenings from calendar
+    let calendarScreenings = {};
+    roles.forEach(role => { calendarScreenings[role.name] = 0; });
+
+    if (token) {
+      const { start, end } = getWeekDates();
+      const events = await calendarService.getEvents(start, end);
 
       events.forEach(event => {
         const title = (event.summary || '').toLowerCase();
@@ -136,13 +136,33 @@ async function updateBadge() {
         const isScreen = keywords.some(kw => combined.includes(kw.toLowerCase()));
         if (!isScreen) return;
 
-        const matches = role.searchTerms?.some(term =>
-          combined.includes(term.toLowerCase())
-        );
-        if (matches) {
-          totalCurrent++;
-        }
+        roles.forEach(role => {
+          const matches = role.searchTerms?.some(term =>
+            combined.includes(term.toLowerCase())
+          );
+          if (matches) {
+            calendarScreenings[role.name]++;
+          }
+        });
       });
+    }
+
+    // Also load synced monthly data for more accurate badge
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const monthlyData = await storageService.get(`monthlyData_${currentMonth}`) || {};
+
+    // Use the max of calendar-counted screens and stored synced screens
+    let totalCurrent = 0;
+    let totalTarget = 0;
+
+    roles.forEach(role => {
+      const rates = role.conversionRates || DEFAULT_RATES;
+      const funnel = calculateRequiredOutreach(role.monthlyHireTarget || 1, rates);
+      totalTarget += Math.ceil(funnel.screens / 4);
+
+      const calendarCount = calendarScreenings[role.name] || 0;
+      const syncedCount = monthlyData.screens?.[role.name] || 0;
+      totalCurrent += Math.max(calendarCount, syncedCount);
     });
 
     const progress = calculateProgress(totalCurrent, totalTarget);
@@ -361,8 +381,7 @@ async function getScreeningData() {
   try {
     const roles = await storageService.get('roles') || [];
     const settings = await storageService.get('settings') || {};
-    const { start, end } = getWeekDates();
-    const events = await calendarService.getEvents(start, end);
+    const token = await storageService.get('authToken');
     const keywords = settings.screenKeywords || ['screen', 'interview'];
 
     const screenings = {};
@@ -370,22 +389,36 @@ async function getScreeningData() {
       screenings[role.name] = 0;
     });
 
-    events.forEach(event => {
-      const title = (event.summary || '').toLowerCase();
-      const description = (event.description || '').toLowerCase();
-      const combined = `${title} ${description}`;
+    let events = [];
+    if (token) {
+      const { start, end } = getWeekDates();
+      events = await calendarService.getEvents(start, end);
 
-      const isScreen = keywords.some(kw => combined.includes(kw.toLowerCase()));
-      if (!isScreen) return;
+      events.forEach(event => {
+        const title = (event.summary || '').toLowerCase();
+        const description = (event.description || '').toLowerCase();
+        const combined = `${title} ${description}`;
 
-      roles.forEach(role => {
-        const matches = role.searchTerms?.some(term =>
-          combined.includes(term.toLowerCase())
-        );
-        if (matches) {
-          screenings[role.name]++;
-        }
+        const isScreen = keywords.some(kw => combined.includes(kw.toLowerCase()));
+        if (!isScreen) return;
+
+        roles.forEach(role => {
+          const matches = role.searchTerms?.some(term =>
+            combined.includes(term.toLowerCase())
+          );
+          if (matches) {
+            screenings[role.name]++;
+          }
+        });
       });
+    }
+
+    // Merge with synced data
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const monthlyData = await storageService.get(`monthlyData_${currentMonth}`) || {};
+    roles.forEach(role => {
+      const syncedCount = monthlyData.screens?.[role.name] || 0;
+      screenings[role.name] = Math.max(screenings[role.name], syncedCount);
     });
 
     return { roles, screenings, events };

@@ -1208,6 +1208,173 @@ h2 {
   gap: 8px;
 }
 
+/* Integration Cards */
+.integration-card {
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.integration-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.integration-name {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.integration-status {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.integration-status.connected {
+  background: rgba(0, 200, 83, 0.2);
+  color: #69f0ae;
+}
+
+.integration-status.error {
+  background: rgba(255, 82, 82, 0.2);
+  color: #ff8a80;
+}
+
+.integration-status.disconnected {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.integration-body {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.integration-body .settings-input {
+  flex: 1;
+}
+
+/* Mapping Section */
+.mapping-section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.mapping-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.mapping-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 12px;
+}
+
+.mapping-label {
+  flex: 1;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-right: 8px;
+}
+
+.mapping-select {
+  width: 140px;
+  padding: 6px 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  color: white;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.mapping-select option {
+  background: #1a1a2e;
+  color: white;
+}
+
+/* Sync Status Display */
+.sync-status {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.sync-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.sync-badge.syncing {
+  background: rgba(102, 126, 234, 0.2);
+  color: #a5b4fc;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.sync-badge.synced {
+  background: rgba(0, 200, 83, 0.15);
+  color: #69f0ae;
+}
+
+.sync-badge.error {
+  background: rgba(255, 82, 82, 0.15);
+  color: #ff8a80;
+}
+
+.funnel-source {
+  font-size: 8px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgba(102, 126, 234, 0.15);
+  color: #a5b4fc;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.sync-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top: 2px solid #a5b4fc;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

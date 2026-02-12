@@ -17,12 +17,19 @@ import {
   buildSearchUrl,
   QUICK_SEARCHES
 } from '../utils/sourcing.js';
+import { GemService } from '../utils/gem.js';
+import { AshbyService } from '../utils/ashby.js';
+import { SyncOrchestrator } from '../utils/sync.js';
 
 class PopupApp {
   constructor() {
     this.calendarService = new CalendarService();
     this.storageService = new StorageService();
+    this.syncOrchestrator = new SyncOrchestrator(this.storageService);
     this.isAuthenticated = false;
+    this.hasCalendar = false;
+    this.syncStatus = { gem: { connected: false }, ashby: { connected: false }, calendar: { connected: false } };
+    this.isSyncing = false;
     this.roles = [];
     this.screenings = {};
     this.settings = {};
@@ -33,6 +40,7 @@ class PopupApp {
     this.sourcingData = {};
     this.outreachLog = [];
     this.generatedSearches = [];
+    this.integrationSettings = {};
 
     this.init();
   }
@@ -49,6 +57,7 @@ class PopupApp {
     // Auth
     this.authSection = document.getElementById('authSection');
     this.authButton = document.getElementById('authButton');
+    this.skipAuthButton = document.getElementById('skipAuthButton');
 
     // Tabs
     this.tabNav = document.getElementById('tabNav');
@@ -134,11 +143,28 @@ class PopupApp {
     this.outreachNumber = document.getElementById('outreachNumber');
     this.outreachNotes = document.getElementById('outreachNotes');
     this.saveOutreach = document.getElementById('saveOutreach');
+
+    // Integration Settings
+    this.gemApiKeyInput = document.getElementById('gemApiKey');
+    this.ashbyApiKeyInput = document.getElementById('ashbyApiKey');
+    this.gemStatusEl = document.getElementById('gemStatus');
+    this.ashbyStatusEl = document.getElementById('ashbyStatus');
+    this.testGemBtn = document.getElementById('testGemBtn');
+    this.testAshbyBtn = document.getElementById('testAshbyBtn');
+    this.gemProjectMappingEl = document.getElementById('gemProjectMapping');
+    this.refreshGemProjectsBtn = document.getElementById('refreshGemProjects');
+    this.ashbyJobMappingEl = document.getElementById('ashbyJobMapping');
+    this.ashbyStageMappingEl = document.getElementById('ashbyStageMapping');
+    this.refreshAshbyJobsBtn = document.getElementById('refreshAshbyJobs');
+
+    // Sync Status
+    this.syncStatusDisplay = document.getElementById('syncStatusDisplay');
   }
 
   bindEvents() {
     // Auth
     this.authButton.addEventListener('click', () => this.authenticate());
+    this.skipAuthButton.addEventListener('click', () => this.skipAuth());
 
     // Tabs
     this.tabBtns.forEach(btn => {
@@ -176,15 +202,27 @@ class PopupApp {
     this.logOutreachBtn.addEventListener('click', () => this.openOutreachModal());
     this.closeOutreachModal.addEventListener('click', () => this.closeOutreachModalHandler());
     this.saveOutreach.addEventListener('click', () => this.saveOutreachData());
+
+    // Integration test buttons
+    this.testGemBtn.addEventListener('click', () => this.testGemConnection());
+    this.testAshbyBtn.addEventListener('click', () => this.testAshbyConnection());
+    this.refreshGemProjectsBtn.addEventListener('click', () => this.fetchGemProjects());
+    this.refreshAshbyJobsBtn.addEventListener('click', () => this.fetchAshbyJobs());
   }
 
   async checkAuth() {
     try {
       const token = await this.storageService.get('authToken');
-      this.isAuthenticated = !!token;
+      const gemKey = await this.storageService.get('gemApiKey');
+      const ashbyKey = await this.storageService.get('ashbyApiKey');
+      const skipped = await this.storageService.get('skippedCalendarAuth');
+      this.hasCalendar = !!token;
+      // Authenticated if ANY data source is configured, or user explicitly skipped
+      this.isAuthenticated = !!(token || gemKey || ashbyKey || skipped);
     } catch (error) {
       console.error('Auth check failed:', error);
       this.isAuthenticated = false;
+      this.hasCalendar = false;
     }
   }
 
@@ -205,6 +243,17 @@ class PopupApp {
       this.authButton.disabled = false;
       alert('Failed to connect to Google Calendar. Please try again.');
     }
+  }
+
+  async skipAuth() {
+    // Skip Google Calendar — go straight to settings so user can add API keys
+    this.isAuthenticated = true;
+    this.hasCalendar = false;
+    await this.storageService.set('skippedCalendarAuth', true);
+    await this.loadData();
+    this.render();
+    // Open settings immediately so user can add Gem/Ashby keys
+    this.showSettings();
   }
 
   async loadData() {
@@ -230,16 +279,49 @@ class PopupApp {
         outreach: {},
         responses: {},
         screens: {},
+        finals: {},
+        offers: {},
         hires: {}
       };
 
-      // Get this week's calendar events
-      const { start, end } = getWeekDates();
-      const events = await this.calendarService.getEvents(start, end);
+      // Get this week's calendar events (only if Google Calendar is connected)
+      if (this.hasCalendar) {
+        const { start, end } = getWeekDates();
+        const events = await this.calendarService.getEvents(start, end);
+        this.screenings = this.countScreenings(events);
+        this.todayScreenings = this.countTodayScreenings(events);
+      } else {
+        this.screenings = {};
+        this.todayScreenings = 0;
+        this.roles.forEach(role => { this.screenings[role.name] = 0; });
+      }
 
-      // Count screenings per role
-      this.screenings = this.countScreenings(events);
-      this.todayScreenings = this.countTodayScreenings(events);
+      // Sync from Gem and Ashby APIs
+      await this.syncOrchestrator.initialize();
+      this.syncStatus = this.syncOrchestrator.getSyncStatus();
+
+      if (this.syncStatus.gem.connected || this.syncStatus.ashby.connected) {
+        this.isSyncing = true;
+        try {
+          const syncedData = await this.syncOrchestrator.syncAll(this.screenings);
+          if (syncedData) {
+            this.monthlyData = syncedData;
+            // Update screenings from synced data if Ashby provided screen counts
+            if (syncedData._sources?.screens?.includes('ashby')) {
+              Object.keys(syncedData.screens || {}).forEach(roleName => {
+                this.screenings[roleName] = Math.max(
+                  this.screenings[roleName] || 0,
+                  syncedData.screens[roleName] || 0
+                );
+              });
+            }
+          }
+        } catch (error) {
+          console.error('Sync failed:', error);
+        } finally {
+          this.isSyncing = false;
+        }
+      }
 
       // Update learned rates based on historical data
       this.updateLearnedRates();
@@ -422,6 +504,9 @@ class PopupApp {
   }
 
   renderDashboard() {
+    // Sync status badges
+    this.renderSyncStatus();
+
     // Morning briefing
     const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const today = new Date();
@@ -623,10 +708,15 @@ class PopupApp {
       funnelTotals.offers.target += funnel.offers;
       funnelTotals.hires.target += funnel.hires;
 
-      // Current values from tracking
+      // Current values from tracking (all sources merged)
       funnelTotals.outreach.current += this.monthlyData.outreach?.[role.name] || 0;
       funnelTotals.responses.current += this.monthlyData.responses?.[role.name] || 0;
-      funnelTotals.screens.current += this.screenings[role.name] || 0;
+      funnelTotals.screens.current += Math.max(
+        this.screenings[role.name] || 0,
+        this.monthlyData.screens?.[role.name] || 0
+      );
+      funnelTotals.finals.current += this.monthlyData.finals?.[role.name] || 0;
+      funnelTotals.offers.current += this.monthlyData.offers?.[role.name] || 0;
       funnelTotals.hires.current += this.monthlyData.hires?.[role.name] || 0;
     });
 
@@ -701,7 +791,7 @@ class PopupApp {
     }).join('');
   }
 
-  showSettings() {
+  async showSettings() {
     this.tabNav.classList.add('hidden');
     this.dashboardTab.classList.add('hidden');
     this.weeklyTab.classList.add('hidden');
@@ -723,6 +813,20 @@ class PopupApp {
     this.weeklyTime.value = this.settings.notificationTimes?.weeklyHour ?? 17;
     this.sundayDay.value = this.settings.notificationTimes?.sundayDay ?? 0;
     this.sundayTime.value = this.settings.notificationTimes?.sundayHour ?? 18;
+
+    // Load integration API keys
+    const gemKey = await this.storageService.get('gemApiKey');
+    const ashbyKey = await this.storageService.get('ashbyApiKey');
+    this.gemApiKeyInput.value = gemKey || '';
+    this.ashbyApiKeyInput.value = ashbyKey || '';
+
+    // Update integration status display
+    this.updateIntegrationStatus();
+
+    // Load existing mappings
+    this.integrationSettings.gemProjectMapping = await this.storageService.get('gemProjectMapping') || {};
+    this.integrationSettings.ashbyJobMapping = await this.storageService.get('ashbyJobMapping') || {};
+    this.integrationSettings.ashbyStageClassification = await this.storageService.get('ashbyStageClassification') || {};
 
     // Render roles config
     this.renderRolesConfig();
@@ -876,8 +980,32 @@ class PopupApp {
     await this.storageService.set('settings', this.settings);
     await this.storageService.set('roles', this.roles);
 
+    // Save integration API keys
+    const gemKey = this.gemApiKeyInput.value.trim();
+    const ashbyKey = this.ashbyApiKeyInput.value.trim();
+
+    if (gemKey) {
+      await this.storageService.set('gemApiKey', gemKey);
+    } else {
+      await this.storageService.remove('gemApiKey');
+    }
+
+    if (ashbyKey) {
+      await this.storageService.set('ashbyApiKey', ashbyKey);
+    } else {
+      await this.storageService.remove('ashbyApiKey');
+    }
+
+    // Save mappings
+    await this.storageService.set('gemProjectMapping', this.integrationSettings.gemProjectMapping || {});
+    await this.storageService.set('ashbyJobMapping', this.integrationSettings.ashbyJobMapping || {});
+    await this.storageService.set('ashbyStageClassification', this.integrationSettings.ashbyStageClassification || {});
+
     // Update notification alarms
     chrome.runtime.sendMessage({ action: 'updateAlarms', settings: this.settings });
+
+    // Re-check auth since API keys may have changed
+    await this.checkAuth();
 
     this.hideSettings();
   }
@@ -1269,6 +1397,321 @@ class PopupApp {
       avgResponseRate: responseRate.toFixed(1),
       topTitles
     };
+  }
+  // ========================================
+  // INTEGRATION METHODS
+  // ========================================
+
+  renderSyncStatus() {
+    if (!this.syncStatusDisplay) return;
+
+    const badges = [];
+
+    if (this.syncStatus.gem.connected) {
+      if (this.isSyncing) {
+        badges.push('<span class="sync-badge syncing"><span class="sync-spinner"></span> Gem syncing</span>');
+      } else if (this.syncStatus.gem.error) {
+        badges.push(`<span class="sync-badge error">Gem: ${this.syncStatus.gem.error}</span>`);
+      } else if (this.syncStatus.gem.lastSync) {
+        const ago = this.getTimeAgo(this.syncStatus.gem.lastSync);
+        badges.push(`<span class="sync-badge synced">Gem synced ${ago}</span>`);
+      }
+    }
+
+    if (this.syncStatus.ashby.connected) {
+      if (this.isSyncing) {
+        badges.push('<span class="sync-badge syncing"><span class="sync-spinner"></span> Ashby syncing</span>');
+      } else if (this.syncStatus.ashby.error) {
+        badges.push(`<span class="sync-badge error">Ashby: ${this.syncStatus.ashby.error}</span>`);
+      } else if (this.syncStatus.ashby.lastSync) {
+        const ago = this.getTimeAgo(this.syncStatus.ashby.lastSync);
+        badges.push(`<span class="sync-badge synced">Ashby synced ${ago}</span>`);
+      }
+    }
+
+    if (badges.length > 0) {
+      this.syncStatusDisplay.innerHTML = badges.join('');
+      this.syncStatusDisplay.classList.remove('hidden');
+    } else {
+      this.syncStatusDisplay.classList.add('hidden');
+    }
+  }
+
+  getTimeAgo(isoString) {
+    const ms = Date.now() - new Date(isoString).getTime();
+    const mins = Math.floor(ms / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    return `${hours}h ago`;
+  }
+
+  updateIntegrationStatus() {
+    const gemKey = this.gemApiKeyInput.value.trim();
+    const ashbyKey = this.ashbyApiKeyInput.value.trim();
+
+    if (gemKey) {
+      this.gemStatusEl.textContent = 'Key saved';
+      this.gemStatusEl.className = 'integration-status connected';
+    } else {
+      this.gemStatusEl.textContent = 'Not connected';
+      this.gemStatusEl.className = 'integration-status disconnected';
+    }
+
+    if (ashbyKey) {
+      this.ashbyStatusEl.textContent = 'Key saved';
+      this.ashbyStatusEl.className = 'integration-status connected';
+    } else {
+      this.ashbyStatusEl.textContent = 'Not connected';
+      this.ashbyStatusEl.className = 'integration-status disconnected';
+    }
+  }
+
+  async testGemConnection() {
+    const key = this.gemApiKeyInput.value.trim();
+    if (!key) {
+      this.gemStatusEl.textContent = 'Enter API key first';
+      this.gemStatusEl.className = 'integration-status error';
+      return;
+    }
+
+    this.testGemBtn.disabled = true;
+    this.testGemBtn.textContent = 'Testing...';
+    this.gemStatusEl.textContent = 'Testing...';
+    this.gemStatusEl.className = 'integration-status disconnected';
+
+    try {
+      const gemService = new GemService(key);
+      const result = await gemService.validateKey();
+
+      if (result.valid) {
+        this.gemStatusEl.textContent = 'Connected';
+        this.gemStatusEl.className = 'integration-status connected';
+
+        // Save key and fetch projects for mapping
+        await this.storageService.set('gemApiKey', key);
+        await this.fetchGemProjects();
+      } else {
+        this.gemStatusEl.textContent = result.error || 'Invalid key';
+        this.gemStatusEl.className = 'integration-status error';
+      }
+    } catch (error) {
+      this.gemStatusEl.textContent = 'Connection failed';
+      this.gemStatusEl.className = 'integration-status error';
+    } finally {
+      this.testGemBtn.disabled = false;
+      this.testGemBtn.textContent = 'Test';
+    }
+  }
+
+  async testAshbyConnection() {
+    const key = this.ashbyApiKeyInput.value.trim();
+    if (!key) {
+      this.ashbyStatusEl.textContent = 'Enter API key first';
+      this.ashbyStatusEl.className = 'integration-status error';
+      return;
+    }
+
+    this.testAshbyBtn.disabled = true;
+    this.testAshbyBtn.textContent = 'Testing...';
+    this.ashbyStatusEl.textContent = 'Testing...';
+    this.ashbyStatusEl.className = 'integration-status disconnected';
+
+    try {
+      const ashbyService = new AshbyService(key);
+      const result = await ashbyService.validateKey();
+
+      if (result.valid) {
+        this.ashbyStatusEl.textContent = 'Connected';
+        this.ashbyStatusEl.className = 'integration-status connected';
+
+        // Save key and fetch jobs/stages for mapping
+        await this.storageService.set('ashbyApiKey', key);
+        await this.fetchAshbyJobs();
+      } else {
+        this.ashbyStatusEl.textContent = result.error || 'Invalid key';
+        this.ashbyStatusEl.className = 'integration-status error';
+      }
+    } catch (error) {
+      this.ashbyStatusEl.textContent = 'Connection failed';
+      this.ashbyStatusEl.className = 'integration-status error';
+    } finally {
+      this.testAshbyBtn.disabled = false;
+      this.testAshbyBtn.textContent = 'Test';
+    }
+  }
+
+  async fetchGemProjects() {
+    const key = this.gemApiKeyInput.value.trim();
+    if (!key) return;
+
+    try {
+      const gemService = new GemService(key);
+      const projects = await gemService.getProjects();
+
+      if (projects.length === 0) {
+        this.gemProjectMappingEl.innerHTML = '<div class="settings-hint">No projects found in Gem</div>';
+        this.gemProjectMappingEl.classList.remove('hidden');
+        return;
+      }
+
+      const existingMapping = this.integrationSettings.gemProjectMapping || {};
+
+      this.gemProjectMappingEl.innerHTML = `
+        <div class="mapping-title">Map Projects to Roles</div>
+        ${projects.map(project => {
+          const projectId = project.id;
+          const projectName = project.name || 'Unnamed';
+          const currentMapping = existingMapping[projectId] || '';
+
+          return `
+            <div class="mapping-row">
+              <span class="mapping-label" title="${projectName}">${projectName}</span>
+              <select class="mapping-select" data-gem-project-id="${projectId}">
+                <option value="ignore" ${!currentMapping || currentMapping === 'ignore' ? 'selected' : ''}>Ignore</option>
+                ${this.roles.map(role =>
+                  `<option value="${role.name}" ${currentMapping === role.name ? 'selected' : ''}>${role.name}</option>`
+                ).join('')}
+              </select>
+            </div>
+          `;
+        }).join('')}
+      `;
+
+      this.gemProjectMappingEl.classList.remove('hidden');
+      this.refreshGemProjectsBtn.classList.remove('hidden');
+
+      // Bind change events
+      this.gemProjectMappingEl.querySelectorAll('.mapping-select').forEach(select => {
+        select.addEventListener('change', () => {
+          const projectId = select.dataset.gemProjectId;
+          if (!this.integrationSettings.gemProjectMapping) {
+            this.integrationSettings.gemProjectMapping = {};
+          }
+          this.integrationSettings.gemProjectMapping[projectId] = select.value;
+        });
+
+        // Initialize mapping from current value
+        const projectId = select.dataset.gemProjectId;
+        if (!this.integrationSettings.gemProjectMapping) {
+          this.integrationSettings.gemProjectMapping = {};
+        }
+        this.integrationSettings.gemProjectMapping[projectId] = select.value;
+      });
+    } catch (error) {
+      console.error('Failed to fetch Gem projects:', error);
+      this.gemProjectMappingEl.innerHTML = '<div class="settings-hint">Failed to fetch projects</div>';
+      this.gemProjectMappingEl.classList.remove('hidden');
+    }
+  }
+
+  async fetchAshbyJobs() {
+    const key = this.ashbyApiKeyInput.value.trim();
+    if (!key) return;
+
+    try {
+      const ashbyService = new AshbyService(key);
+
+      // Fetch jobs and stages
+      const jobs = await ashbyService.getJobs();
+      const stages = await ashbyService.getInterviewStages();
+
+      // Render job-to-role mapping
+      if (jobs.length > 0) {
+        const existingJobMapping = this.integrationSettings.ashbyJobMapping || {};
+
+        this.ashbyJobMappingEl.innerHTML = `
+          <div class="mapping-title">Map Jobs to Roles</div>
+          ${jobs.filter(job => job.status === 'Open' || job.status === 'open').map(job => {
+            const jobId = job.id;
+            const jobTitle = job.title || job.name || 'Unnamed';
+            const currentMapping = existingJobMapping[jobId] || '';
+
+            return `
+              <div class="mapping-row">
+                <span class="mapping-label" title="${jobTitle}">${jobTitle}</span>
+                <select class="mapping-select" data-ashby-job-id="${jobId}">
+                  <option value="ignore" ${!currentMapping || currentMapping === 'ignore' ? 'selected' : ''}>Ignore</option>
+                  ${this.roles.map(role =>
+                    `<option value="${role.name}" ${currentMapping === role.name ? 'selected' : ''}>${role.name}</option>`
+                  ).join('')}
+                </select>
+              </div>
+            `;
+          }).join('')}
+        `;
+
+        this.ashbyJobMappingEl.classList.remove('hidden');
+
+        // Bind change events for jobs
+        this.ashbyJobMappingEl.querySelectorAll('.mapping-select').forEach(select => {
+          select.addEventListener('change', () => {
+            const jobId = select.dataset.ashbyJobId;
+            if (!this.integrationSettings.ashbyJobMapping) {
+              this.integrationSettings.ashbyJobMapping = {};
+            }
+            this.integrationSettings.ashbyJobMapping[jobId] = select.value;
+          });
+
+          const jobId = select.dataset.ashbyJobId;
+          if (!this.integrationSettings.ashbyJobMapping) {
+            this.integrationSettings.ashbyJobMapping = {};
+          }
+          this.integrationSettings.ashbyJobMapping[jobId] = select.value;
+        });
+      }
+
+      // Render stage classification
+      if (stages.length > 0) {
+        const existingClassification = this.integrationSettings.ashbyStageClassification || {};
+        const classifications = ['ignore', 'screen', 'final', 'offer', 'hired'];
+
+        this.ashbyStageMappingEl.innerHTML = `
+          <div class="mapping-title">Classify Interview Stages</div>
+          ${stages.map(stage => {
+            const stageId = stage.id;
+            const stageName = stage.title || stage.name || 'Unnamed';
+            const currentClassification = existingClassification[stageId] || ashbyService.suggestStageClassification(stageName);
+
+            return `
+              <div class="mapping-row">
+                <span class="mapping-label" title="${stageName}">${stageName}</span>
+                <select class="mapping-select" data-ashby-stage-id="${stageId}">
+                  ${classifications.map(c =>
+                    `<option value="${c}" ${currentClassification === c ? 'selected' : ''}>${c.charAt(0).toUpperCase() + c.slice(1)}</option>`
+                  ).join('')}
+                </select>
+              </div>
+            `;
+          }).join('')}
+        `;
+
+        this.ashbyStageMappingEl.classList.remove('hidden');
+
+        // Bind change events for stages
+        this.ashbyStageMappingEl.querySelectorAll('.mapping-select').forEach(select => {
+          select.addEventListener('change', () => {
+            const stageId = select.dataset.ashbyStageId;
+            if (!this.integrationSettings.ashbyStageClassification) {
+              this.integrationSettings.ashbyStageClassification = {};
+            }
+            this.integrationSettings.ashbyStageClassification[stageId] = select.value;
+          });
+
+          const stageId = select.dataset.ashbyStageId;
+          if (!this.integrationSettings.ashbyStageClassification) {
+            this.integrationSettings.ashbyStageClassification = {};
+          }
+          this.integrationSettings.ashbyStageClassification[stageId] = select.value;
+        });
+      }
+
+      this.refreshAshbyJobsBtn.classList.remove('hidden');
+    } catch (error) {
+      console.error('Failed to fetch Ashby jobs:', error);
+      this.ashbyJobMappingEl.innerHTML = '<div class="settings-hint">Failed to fetch jobs</div>';
+      this.ashbyJobMappingEl.classList.remove('hidden');
+    }
   }
 }
 
